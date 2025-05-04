@@ -147,6 +147,20 @@
             },
             new SequenceHandler
             {
+                Description = "Single Shift Select of G2 Character Set",
+                SequenceType = SequenceHandler.ESequenceType.Escape,
+                CsiCommand = "N",
+                Handler = (sequence, controller) => controller.SingleShiftSelectG2()
+            },
+            new SequenceHandler
+            {
+                Description = "Single Shift Select of G3 Character Set",
+                SequenceType = SequenceHandler.ESequenceType.Escape,
+                CsiCommand = "O",
+                Handler = (sequence, controller) => controller.SingleShiftSelectG3()
+            },
+            new SequenceHandler
+            {
                 Description = "Invoke the G2 Character Set as GL (LS2).",
                 SequenceType = SequenceHandler.ESequenceType.Escape,
                 CsiCommand = "n",
@@ -195,6 +209,36 @@
             },
             new SequenceHandler
             {
+                Description = "Change VT100 text foreground color to Pt.",
+                SequenceType = SequenceHandler.ESequenceType.OSC,
+                Param0 = new int [] { 10 },
+                Handler = (sequence, controller) => controller.SetRgbForegroundColor(sequence.Command)
+            },
+            new SequenceHandler
+            {
+                Description = "Change VT100 text background color to Pt.",
+                SequenceType = SequenceHandler.ESequenceType.OSC,
+                Param0 = new int [] { 11 },
+                Handler = (sequence, controller) => controller.SetRgbBackgroundColor(sequence.Command)
+            },
+            new SequenceHandler
+            {
+                Description = "Change VT100 text foreground color to Pt. (Query)",
+                SequenceType = SequenceHandler.ESequenceType.OSC,
+                Param0 = new int [] { 10 },
+                OscText = "?",
+                Handler = (sequence, controller) => controller.ReportRgbForegroundColor()
+            },
+            new SequenceHandler
+            {
+                Description = "Change VT100 text background color to Pt. (Query)",
+                SequenceType = SequenceHandler.ESequenceType.OSC,
+                Param0 = new int [] { 11 },
+                OscText = "?",
+                Handler = (sequence, controller) => controller.ReportRgbBackgroundColor()
+            },
+            new SequenceHandler
+            {
                 Description = "Insert Ps (Blank) Character(s) (default = 1)",
                 SequenceType = SequenceHandler.ESequenceType.CSI,
                 CsiCommand = "@",
@@ -221,6 +265,16 @@
                 Handler = (sequence, controller) => {
                     controller.RepeatLastCharacter(sequence.Parameters[0]);
                 }
+            },
+            new SequenceHandler
+            {
+                Description = "Send Device Attributes (Tertiary DA).",
+                SequenceType = SequenceHandler.ESequenceType.CSI,
+                Equal = true,
+                CsiCommand = "c",
+                ExactParameterCountOrDefault = 1,
+                Param0 = new int [] { 0 },
+                Handler = (sequence, controller) => controller.SendDeviceAttributesTertiary()
             },
             new SequenceHandler
             {
@@ -393,6 +447,10 @@
                                 controller.Enable80132Mode(true);
                                 break;
 
+                            case 42:    // Ps = 4 2  -> Enable National Replacement Character sets (DECNRCM), VT220.
+                                controller.EnableNationalReplacementCharacterSets(true);
+                                break;
+
                             case 45:    // Ps = 4 5  -> Reverse-wraparound Mode.
                                 controller.EnableReverseWrapAroundMode(true);
                                 break;
@@ -447,7 +505,7 @@
                                 break;
 
                             default:
-                                System.Diagnostics.Debug.WriteLine("Reset Mode (RM) mode: " + parameter.ToString() + " is unknown");
+                                System.Diagnostics.Debug.WriteLine("DEC Private Mode Set (DECSET) mode: " + parameter.ToString() + " is unknown");
                                 break;
                         }
                     }
@@ -567,6 +625,10 @@
 
                             case 40:    // Ps = 4 0  -> Disallow 80 -> 132 Mode.
                                 controller.Enable80132Mode(false);
+                                break;
+
+                            case 42:    // Ps = 4 2  -> Disable National Replacement Character sets (DECNRCM), VT220.
+                                controller.EnableNationalReplacementCharacterSets(false);
                                 break;
 
                             case 45:    // Ps = 4 5  -> No Reverse-wraparound Mode.
@@ -948,6 +1010,164 @@
                 ExactParameterCount = 1,
                 Param0 = new int [] { 2004 },
                 Handler = (sequence, controller) => controller.SaveBracketedPasteMode()
+            },
+            new SequenceHandler
+            {
+                Description = "Window manipulation (from dtterm, as well as extensions by xterm).",
+                SequenceType = SequenceHandler.ESequenceType.CSI,
+                CsiCommand = "t",
+                Query = false,
+                MinimumParameterCount = 1,
+                Handler = (sequence, controller) =>
+                {
+                    switch(sequence.Parameters[0])
+                    {
+                        case 1:
+                            controller.XTermDeiconifyWindow();
+                            break;
+                        case 2:
+                            controller.XTermIconifyWindow();
+                            break;
+                        case 3:
+                            if(sequence.Parameters.Count == 3)
+                                controller.XTermMoveWindow(sequence.Parameters[1], sequence.Parameters[2]);
+                            else
+                                System.Diagnostics.Debug.WriteLine($"XTermMoveWindow needs 3 parameters {sequence.ToString()}");
+                            break;
+                        case 4:
+                            if(sequence.Parameters.Count == 3)
+                                controller.XTermResizeWindow(sequence.Parameters[2], sequence.Parameters[1]);
+                            else
+                                System.Diagnostics.Debug.WriteLine($"XTermResizeWindow needs 3 parameters {sequence.ToString()}");
+                            break;
+                        case 5:
+                            controller.XTermRaiseToFront();
+                            break;
+                        case 6:
+                            controller.XTermLowerToBottom();
+                            break;
+                        case 7:
+                            controller.XTermRefreshWindow();
+                            break;
+                        case 8:
+                            if(sequence.Parameters.Count == 3)
+                                controller.XTermResizeTextArea(sequence.Parameters[1], sequence.Parameters[2]);
+                            else
+                                System.Diagnostics.Debug.WriteLine($"XTermResizeTextArea needs 3 parameters {sequence.ToString()}");
+                            break;
+                        case 9:
+                            if(sequence.Parameters.Count >= 2)
+                            {
+                                switch(sequence.Parameters[1])
+                                {
+                                    case 0:
+                                        controller.XTermMaximizeWindow(false, false);
+                                        break;
+                                    case 1:
+                                        controller.XTermMaximizeWindow(true, true);
+                                        break;
+                                    case 2:
+                                        controller.XTermMaximizeWindow(false, true);
+                                        break;
+                                    case 3:
+                                        controller.XTermMaximizeWindow(true, false);
+                                        break;
+                                    default:
+                                        System.Diagnostics.Debug.WriteLine($"Unknown window maximize mode operation {sequence.ToString()}");
+                                        break;
+                                }
+                            }
+                            else
+                                System.Diagnostics.Debug.WriteLine($"Window maximize mode operation requires 2 parameters {sequence.ToString()}");
+                            break;
+                        case 10:
+                            if(sequence.Parameters.Count >= 2)
+                            {
+                                switch(sequence.Parameters[1])
+                                {
+                                    case 0:
+                                        controller.XTermFullScreenExit();
+                                        break;
+                                    case 1:
+                                        controller.XTermFullScreenEnter();
+                                        break;
+                                    case 2:
+                                        controller.XTermFullScreenToggle();
+                                        break;
+                                    default:
+                                        System.Diagnostics.Debug.WriteLine($"Unknown full screen mode operation {sequence.ToString()}");
+                                        break;
+                                }
+                            }
+                            else
+                                System.Diagnostics.Debug.WriteLine($"Window full screen mode operation requires 2 parameters {sequence.ToString()}");
+                            break;
+                        case 11:
+                        case 13:
+                        case 14:
+                        case 15:
+                        case 16:
+                        case 18:
+                        case 19:
+                        case 20:
+                        case 21:
+                            controller.XTermReport((XTermReportType)sequence.Parameters[0]);
+                            break;
+                        case 22:
+                            if(sequence.Parameters.Count >= 2)
+                            {
+                                switch(sequence.Parameters[1])
+                                {
+                                    case 0:
+                                        controller.PushXTermWindowIcon();
+                                        controller.PushXTermWindowTitle();
+                                        break;
+                                    case 1:
+                                        controller.PushXTermWindowIcon();
+                                        break;
+                                    case 2:
+                                        controller.PushXTermWindowTitle();
+                                        break;
+                                    default:
+                                        System.Diagnostics.Debug.WriteLine($"Unknown save window title or icon sequence {sequence.ToString()}");
+                                        break;
+                                }
+                            }
+                            else
+                                System.Diagnostics.Debug.WriteLine($"XTerm Icon/Title operation requires 2 parameters {sequence.ToString()}");
+                            break;
+                        case 23:
+                            if(sequence.Parameters.Count >= 2)
+                            {
+                                switch(sequence.Parameters[1])
+                                {
+                                    case 0:
+                                        controller.PopXTermWindowIcon();
+                                        controller.PopXTermWindowTitle();
+                                        break;
+                                    case 1:
+                                        controller.PopXTermWindowIcon();
+                                        break;
+                                    case 2:
+                                        controller.PopXTermWindowTitle();
+                                        break;
+                                    default:
+                                        System.Diagnostics.Debug.WriteLine($"Unknown restore window title or icon sequence {sequence.ToString()}");
+                                        break;
+                                }
+                            }
+                            else
+                                System.Diagnostics.Debug.WriteLine($"XTerm Icon/Title operation requires 2 parameters {sequence.ToString()}");
+                            break;
+                        case 24:
+                            // TODO : Consider just ignoring this feature... I can't imagine it being overly useful.
+                            System.Diagnostics.Debug.WriteLine($"(Not implemented) Resize to Ps lines (DECSLPP) {sequence.ToString()}");
+                            break;
+                        default:
+                            System.Diagnostics.Debug.WriteLine($"Unknown DTTerm/XTerm window manipulation sequence {sequence.ToString()}");
+                            break;
+                    }
+                }
             },
             new SequenceHandler
             {
@@ -1480,6 +1700,7 @@
                         x.CsiCommand == sequence.Command &&
                         x.Query == sequence.IsQuery &&
                         x.Send == sequence.IsSend &&
+                        x.Equal == sequence.IsEquals &&
                         x.Bang == sequence.IsBang &&
                         (
                             (
@@ -1544,10 +1765,28 @@
 
             if (sequence is OscSequence)
             {
-                if (sequence.Parameters.Count < 1)
-                    throw new Exception("OSC sequence doesn't have any parameters");
+                if (sequence.Parameters == null || sequence.Parameters.Count < 1)
+                    throw new Exception($"OSC sequence doesn't have any parameters {sequence}");
 
-                var handler = Handlers.Where(x => x.SequenceType == SequenceHandler.ESequenceType.OSC && x.Param0.Contains(sequence.Parameters[0])).SingleOrDefault();
+                var handler = Handlers
+                    .Where(x => 
+                        x.SequenceType == SequenceHandler.ESequenceType.OSC && 
+                        x.Param0.Contains(sequence.Parameters[0]) &&
+                        x.OscText == sequence.Command
+                    )
+                    .SingleOrDefault();
+
+                if(handler == null)
+                {
+                    handler = Handlers
+                    .Where(x =>
+                        x.SequenceType == SequenceHandler.ESequenceType.OSC &&
+                        x.Param0.Contains(sequence.Parameters[0]) &&
+                        string.IsNullOrEmpty(x.OscText)
+                    )
+                    .SingleOrDefault();
+                }
+
                 if (handler == null)
                     throw new Exception("There are no sequence handlers configured for type OscSequence with param0 = " + sequence.Parameters[0].ToString());
 

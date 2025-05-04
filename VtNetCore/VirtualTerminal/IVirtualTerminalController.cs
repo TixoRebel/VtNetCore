@@ -36,6 +36,7 @@
         void EnableAutoRepeatKeys(bool enable);
         void EnableBlinkingCursor(bool enable);
         void EnableLeftAndRightMarginMode(bool enable);
+        void EnableNationalReplacementCharacterSets(bool enable);
         void EnableNormalBuffer();
         void EnableOriginMode(bool enable);
         void EnableReverseVideoMode(bool enable);
@@ -60,7 +61,11 @@
         void InvokeCharacterSetModeR(ECharacterSetMode mode);
         void MoveCursorRelative(int x, int y);
         void NewLine();
+        void PopXTermWindowIcon();
+        void PopXTermWindowTitle();
         void ProtectCharacter(int protect);
+        void PushXTermWindowIcon();
+        void PushXTermWindowTitle();
         void PutChar(char character);
         void PutG2Char(char character);
         void PutG3Char(char character);
@@ -70,6 +75,8 @@
         void RequestStatusStringSetProtectionAttribute();
         void ReportCursorPosition();
         void ReportExtendedCursorPosition();
+        void ReportRgbBackgroundColor();
+        void ReportRgbForegroundColor();
         void RestoreCursor();
         void RestoreEnableNormalBuffer();
         void RestoreEnableSgrMouseMode();
@@ -91,6 +98,7 @@
         void ScrollAcross(int columns);
         void SendDeviceAttributes();
         void SendDeviceAttributesSecondary();
+        void SendDeviceAttributesTertiary();
         void SetAbsoluteRow(int line);
         void SetBracketedPasteMode(bool enable);
         void SetCharacterAttribute(int parameter);
@@ -109,11 +117,12 @@
         void SetLeftAndRightMargins(int left, int right);
         void SetKeypadType(EKeypadType type);
         void SetRgbBackgroundColor(int red, int green, int blue);
+        void SetRgbBackgroundColor(string xParseColor);
         void SetRgbForegroundColor(int red, int green, int blue);
+        void SetRgbForegroundColor(string xParseColor);
         void SetScrollingRegion(int top, int bottom);
         void SetSendFocusInAndFocusOutEvents(bool enabled);
         void SetStartOfGuardedArea();
-
         void SetUseAllMouseTracking(bool enabled);
         void SetUTF8();
         void SetUtf8MouseMode(bool enabled);
@@ -125,6 +134,8 @@
         void SetX11SendMouseXYOnButton(bool enabled);
         void ShiftIn();
         void ShiftOut();
+        void SingleShiftSelectG2();
+        void SingleShiftSelectG3();
         void ShowCursor(bool show);
         void Tab();
         void TabSet();
@@ -133,5 +144,18 @@
         void VerticalTab();
         void Vt52EnterAnsiMode();
         void Vt52Identify();
+        void XTermDeiconifyWindow();
+        void XTermFullScreenEnter();
+        void XTermFullScreenExit();
+        void XTermFullScreenToggle();
+        void XTermIconifyWindow();
+        void XTermLowerToBottom();
+        void XTermMaximizeWindow(bool horizontally, bool vertically);
+        void XTermMoveWindow(int x, int y);
+        void XTermRaiseToFront();
+        void XTermRefreshWindow();
+        void XTermReport(XTermReportType reportType);
+        void XTermResizeTextArea(int columns, int rows);
+        void XTermResizeWindow(int width, int height);
     }
 }

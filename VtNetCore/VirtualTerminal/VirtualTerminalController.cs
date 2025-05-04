@@ -361,6 +361,8 @@
             }
         }
 
+        
+
         private ECharacterSet RightCharacterSet
         {
             get
@@ -487,7 +489,7 @@
         /// Returns the visible text on the screen as per TopRow and the logical rows and columns
         /// </summary>
         /// <returns>The screen text with each line separated by a line feed</returns>
-        internal string GetScreenText()
+        public string GetScreenText()
         {
             string result = "";
 
@@ -589,7 +591,11 @@
                 currentRow.Spans.Add(currentSpan);
 
                 if (sourceLine == null && width > 0)
+                {
                     currentSpan.Text = string.Empty.PadRight(width, ' ');
+                    currentSpan.ForgroundColor = CursorState.ReverseVideoMode ? NullAttribute.BackgroundWebColor : NullAttribute.WebColor;
+                    currentSpan.BackgroundColor = CursorState.ReverseVideoMode ? NullAttribute.WebColor : NullAttribute.BackgroundWebColor;
+                }
                 else if (sourceLine != null)
                 {
                     var lineWidth = width > 0 ? width : sourceLine.Count;
@@ -855,6 +861,12 @@
             }
         }
 
+        public void EnableNationalReplacementCharacterSets(bool enable)
+        {
+            LogController($"EnableNationalReplacementCharacterSets(enable:{enable})");
+            CursorState.NationalCharacterReplacementMode = enable;
+        }
+
         public void SetCharacterSet(ECharacterSet characterSet, ECharacterSetMode mode)
         {
             LogController("SetCharacterSet(characterSet:" + characterSet.ToString() + ")");
@@ -874,13 +886,16 @@
                     CursorState.G3 = characterSet;
                     break;
                 case ECharacterSetMode.Vt300G1:
+                    CursorState.G1 = characterSet;
                     CursorState.Vt300G1 = characterSet;
                     break;
                 case ECharacterSetMode.Vt300G2:
                     CursorState.Vt300G2 = characterSet;
+                    CursorState.G2 = characterSet;
                     break;
                 case ECharacterSetMode.Vt300G3:
                     CursorState.Vt300G3 = characterSet;
+                    CursorState.G3 = characterSet;
                     break;
             }
         }
@@ -1523,9 +1538,15 @@
             LogExtreme("PutChar(ch:'" + character + "'=" + ((int)character).ToString() + ")");
 
             if (!CursorState.Utf8 && IsRGrCharacter(character))
-                character = Iso2022Encoding.DecodeChar((char)(character - (char)0x80), RightCharacterSet);
+                character = Iso2022Encoding.DecodeChar((char)(character - (char)0x80), RightCharacterSet, CursorState.NationalCharacterReplacementMode);
             else
-                character = Iso2022Encoding.DecodeChar(character, CharacterSet);
+                character = Iso2022Encoding.DecodeChar(character, CharacterSet, CursorState.NationalCharacterReplacementMode);
+
+            if (CursorState.SingleShiftSelectCharacterMode != ECharacterSetMode.Unset)
+            {
+                CursorState.CharacterSetMode = CursorState.SingleShiftSelectCharacterMode;
+                CursorState.SingleShiftSelectCharacterMode = ECharacterSetMode.Unset;
+            }
 
             if (StoreRawText)
             {
@@ -1641,6 +1662,20 @@
             CursorState.CharacterSetMode = ECharacterSetMode.IsoG1;
         }
 
+        public void SingleShiftSelectG2()
+        {
+            LogController("SingleShiftSelectG2()");
+            CursorState.SingleShiftSelectCharacterMode = CursorState.CharacterSetMode;
+            CursorState.CharacterSetMode = ECharacterSetMode.IsoG2;
+        }
+
+        public void SingleShiftSelectG3()
+        {
+            LogController("SingleShiftSelectG3()");
+            CursorState.SingleShiftSelectCharacterMode = CursorState.CharacterSetMode;
+            CursorState.CharacterSetMode = ECharacterSetMode.IsoG3;
+        }
+
         public void InvokeCharacterSetMode(ECharacterSetMode mode)
         {
             LogController("InvokeCharacterSetMode(mode: " + mode.ToString() + ")");
@@ -1674,6 +1709,26 @@
                 CursorState.Attributes.BackgroundRgb = new TerminalColor { Red = (uint)red, Green = (uint)green, Blue = (uint)blue };
             else
                 CursorState.Attributes.BackgroundRgb.Set((uint)red, (uint)green, (uint)blue);
+        }
+
+        public void SetRgbForegroundColor(string xParseColor)
+        {
+            LogController($"SetRgbForegroundColor(xParseColor={xParseColor})");
+
+            if (CursorState.Attributes.ForegroundRgb == null)
+                CursorState.Attributes.ForegroundRgb = new TerminalColor(xParseColor);
+            else
+                CursorState.Attributes.ForegroundRgb.Set(xParseColor);
+        }
+
+        public void SetRgbBackgroundColor(string xParseColor)
+        {
+            LogController($"SetRgbBackgroundColor(xParseColor={xParseColor})");
+
+            if (CursorState.Attributes.BackgroundRgb == null)
+                CursorState.Attributes.BackgroundRgb = new TerminalColor(xParseColor);
+            else
+                CursorState.Attributes.BackgroundRgb.Set(xParseColor);
         }
 
         public void SetIso8613PaletteForeground(int paletteEntry)
@@ -1943,7 +1998,7 @@
 
         public void UseHighlightMouseTracking(bool enable)
         {
-            LogController("Unimplemented: UseHighlightMouseTracking(enable:" + enable.ToString() + ")");
+            LogController("UseHighlightMouseTracking(enable:" + enable.ToString() + ")");
             HighlightMouseTracking = enable;
             ChangeCount++;
         }
@@ -2066,6 +2121,12 @@
             LogController("ClearScrollingRegion()");
             ScrollTop = 0;
             ScrollBottom = -1;
+
+            if (!CursorState.OriginMode)
+            {
+                CursorState.CurrentRow = 0;
+                CursorState.CurrentColumn = 0;
+            }
         }
 
         public void SetAutomaticNewLine(bool enable)
@@ -2111,7 +2172,12 @@
 
                 if (CursorState.OriginMode)
                     CursorState.CurrentRow = ScrollTop;
-            }
+                else
+                {
+                    CursorState.CurrentRow = 0;
+                    CursorState.CurrentColumn = 0;
+                }
+            }            
         }
 
         public void SetLeftAndRightMargins(int left, int right)
@@ -2516,7 +2582,7 @@
 
         public void EnableSmoothScrollMode(bool enable)
         {
-            LogController("Unimplemented: EnableSmoothScrollMode(enable:" + enable.ToString() + ")");
+            LogController("EnableSmoothScrollMode(enable:" + enable.ToString() + ")");
             SmoothScrollMode = enable;
         }
 
@@ -2559,18 +2625,18 @@
 
         public void EnableAutoRepeatKeys(bool enable)
         {
-            LogController("Unimplemented: EnableAutoRepeatKeys(enable:" + enable.ToString() + ")");
+            LogController("EnableAutoRepeatKeys(enable:" + enable.ToString() + ")");
         }
 
         public void Enable80132Mode(bool enable)
         {
-            LogController("Unimplemented: Enable80132Mode(enable:" + enable.ToString() + ")");
+            LogController("Enable80132Mode(enable:" + enable.ToString() + ")");
             Columns = VisibleColumns;
         }
 
         public void EnableReverseWrapAroundMode(bool enable)
         {
-            LogController("Unimplemented: EnableReverseWrapAroundMode(enable:" + enable.ToString() + ")");
+            LogController("EnableReverseWrapAroundMode(enable:" + enable.ToString() + ")");
             ReverseWrapAroundMode = enable;
         }
 
@@ -2594,7 +2660,7 @@
         public void SendDeviceAttributes()
         {
             LogController("SendDeviceAttributes()");
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(DeviceAttributes) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(DeviceAttributes) });
         }
 
         public static readonly string XTermSecondaryAttributes = "\u001b[>41;136;0c";
@@ -2602,7 +2668,15 @@
         public void SendDeviceAttributesSecondary()
         {
             LogController("SendDeviceAttributesSecondary()");
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(XTermSecondaryAttributes) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(XTermSecondaryAttributes) });
+        }
+
+        public static readonly string XTermTeriaryAttributes = "\u001bP!|0125\u001b\\";
+
+        public void SendDeviceAttributesTertiary()
+        {
+            LogController("SendDeviceAttributesTertiary()");
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(XTermTeriaryAttributes) });
         }
 
         public static readonly byte[] DsrOk = { 0x1B, (byte)'[', (byte)'0', (byte)'n' };
@@ -2610,7 +2684,7 @@
         public void DeviceStatusReport()
         {
             LogController("DeviceStatusReport()");
-            SendData.Invoke(this, new SendDataEventArgs { Data = DsrOk });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = DsrOk });
         }
 
         public void ReportCursorPosition()
@@ -2619,7 +2693,7 @@
 
             var rcp = "\u001b[" + (CursorState.CurrentRow - ScrollTop + 1).ToString() + ";" + (CursorState.CurrentColumn - LeftMargin + 1).ToString() + "R";
 
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(rcp) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(rcp) });
         }
 
         public void ReportExtendedCursorPosition()
@@ -2628,18 +2702,18 @@
 
             var rcp = "\u001b[?" + (CursorState.CurrentRow - ScrollTop + 1).ToString() + ";" + (CursorState.CurrentColumn - LeftMargin + 1).ToString() + "R";
 
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(rcp) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(rcp) });
         }
 
         public void SetLatin1()
         {
-            LogController("Unimplemented: SetLatin1()");
+            LogController("SetLatin1()");
             CursorState.Utf8 = false;
         }
 
         public void SetUTF8()
         {
-            LogController("Unimplemented: SetUTF8()");
+            LogController("SetUTF8()");
             CursorState.Utf8 = true;
         }
 
@@ -2708,7 +2782,7 @@
 
         private void Send(byte[] value)
         {
-            SendData.Invoke(this, new SendDataEventArgs { Data = value });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = value });
         }
 
         private static readonly byte[] BracketedPasteModePrefix = Encoding.ASCII.GetBytes("\u001b[200~,");
@@ -2927,6 +3001,9 @@
         {
             LogController("RequestDecPrivateMode(mode:" + mode.ToString() + ")");
 
+            if (SendData == null)
+                return;
+
             switch (mode)
             {
                 case 1:         // Ps = 1  -> Application Cursor Keys (DECCKM). | Ps = 1  -> Normal Cursor Keys (DECCKM).
@@ -3032,7 +3109,7 @@
             if (Vt52Mode)
                 return;
 
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(ConformanceLevelResponse) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(ConformanceLevelResponse) });
         }
 
         public void RequestStatusStringSetProtectionAttribute()
@@ -3043,7 +3120,7 @@
 
             // TODO : Is this for the current state or the character at the cursor position?
 
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(result) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(result) });
         }
 
         public static readonly string Vt52Identification = "\u001b/Z";
@@ -3052,7 +3129,7 @@
         {
             LogController("Vt52Identify()");
 
-            SendData.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(Vt52Identification) });
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.ASCII.GetBytes(Vt52Identification) });
         }
 
         public void SetCursorStyle(ECursorShape shape, bool blink)
@@ -3063,6 +3140,9 @@
 
         public bool KeyPressed(string key, bool controlPressed, bool shiftPressed)
         {
+            if (SendData == null)
+                return false;
+
             var code = GetKeySequence(key, controlPressed, shiftPressed);
             if (code != null)
             {
@@ -3102,6 +3182,9 @@
         /// <param name="shiftPressed">true if shift is pressed</param>
         public void MousePress(int x, int y, int buttonNumber, bool controlPressed, bool shiftPressed)
         {
+            if (SendData == null)
+                return;
+
             if(X10SendMouseXYOnButton)
             {
                 var x10Message = "\u001b[M" + (char)(buttonNumber + ' ') + (char)(' ' + x + 1) + (char)(' ' + y + 1);
@@ -3162,6 +3245,9 @@
         /// <param name="shiftPressed">true if shift is pressed</param>
         public void MouseRelease(int x, int y, bool controlPressed, bool shiftPressed)
         {
+            if (SendData == null)
+                return;
+
             LastMousePosition.Set(-1, -1);
 
             if (X11SendMouseXYOnButton || CellMotionMouseTracking ||UseAllMouseTracking)
@@ -3211,6 +3297,9 @@
         /// <param name="shiftPressed">true if shift is pressed</param>
         public void MouseMove(int x, int y, int buttonNumber, bool controlPressed, bool shiftPressed)
         {
+            if (SendData == null)
+                return;
+
             if (LastMousePosition.Equals(x, y))
                 return;
 
@@ -3242,7 +3331,10 @@
         /// </summary>
         public void FocusIn()
         {
-            if(SendFocusInAndFocusOutEvents)
+            if (SendData == null)
+                return;
+
+            if (SendFocusInAndFocusOutEvents)
             {
                 var message = "\u001b[I";
 
@@ -3260,6 +3352,9 @@
         /// </summary>
         public void FocusOut()
         {
+            if (SendData == null)
+                return;
+
             if (SendFocusInAndFocusOutEvents)
             {
                 var message = "\u001b[O";
@@ -3271,6 +3366,142 @@
                     }
                 );
             }
+        }
+
+        public void PopXTermWindowIcon()
+        {
+            LogController($"(Not implemented) Restore xterm icon from stack.");
+        }
+
+        public void PopXTermWindowTitle()
+        {
+            LogController($"(Not implemented) Restore xterm window title from stack.");
+        }
+
+        public void PushXTermWindowIcon()
+        {
+            LogController($"(Not implemented) Save xterm icon on stack.");
+        }
+
+        public void PushXTermWindowTitle()
+        {
+            LogController($"(Not implemented) Save xterm window title on stack.");
+        }
+
+        public void XTermDeiconifyWindow()
+        {
+            LogController("(Not implemented) De-iconify window");
+        }
+
+        public void XTermFullScreenEnter()
+        {
+            LogController($"(Not implemented) Change to full-screen mode.");
+        }
+        public void XTermFullScreenExit()
+        {
+            LogController($"(Not implemented) Undo full-screen mode.");
+        }
+        public void XTermFullScreenToggle()
+        {
+            LogController($"(Not implemented) Toggle full-screen mode.");
+        }
+
+        public void XTermIconifyWindow()
+        {
+            LogController("(Not implemented) Iconify window");
+        }
+
+        public void XTermLowerToBottom()
+        {
+            LogController($"(Not implemented) Lower xterm window to bottom of the stacking order");
+        }
+
+        public void XTermMaximizeWindow(bool horizontally, bool vertically)
+        {
+            if (!horizontally && !vertically)
+                LogController("(Not implemented) XTerm Restore maximized window");
+            else
+                LogController($"(Not implemented) XTerm maxmimize window horizontally={horizontally}, vertically={vertically}");
+        }
+
+        public void XTermMoveWindow(int x, int y)
+        {
+            LogController($"(Not implemented) Move windows to x={x},y={y}");
+        }
+
+        public void XTermRaiseToFront()
+        {
+            LogController($"(Not implemented) Raise xterm window to front of the stacking order");
+        }
+
+        public void XTermReport(XTermReportType reportType)
+        {
+            switch(reportType)
+            {
+                case XTermReportType.WindowState:
+                    LogController($"(Not implemented) Report xterm window state.");
+                    break;
+                case XTermReportType.WindowPosition:
+                    LogController($"(Not implemented) Report xterm window position????");
+                    break;
+                case XTermReportType.TextAreaPixelSize:
+                    LogController($"(Not implemented) Report xterm text area size in pixels????");
+                    break;
+                case XTermReportType.ScreenPixelSize:
+                    LogController($"(Not implemented) Report size of the screen in pixels.");
+                    break;
+                case XTermReportType.CharacterPixelSize:
+                    LogController($"(Not implemented) Report xterm character size in pixels.");
+                    break;
+                case XTermReportType.TextAreaCharSize:
+                    LogController($"(Not implemented) Report the size of the text area in characters.");
+                    break;
+                case XTermReportType.ScreenCharSize:
+                    LogController($"(Not implemented) Report the size of the screen in characters.");
+                    break;
+                case XTermReportType.WindowIconLabel:
+                    LogController($"(Not implemented) Report xterm window's icon label.");
+                    break;
+                case XTermReportType.WindowTitle:
+                    LogController($"(Not implemented) Report xterm window's title.");
+                    break;
+                default:
+                    LogController($"Unknown XTerm report type {reportType}");
+                    break;
+            }
+        }
+
+        public void XTermRefreshWindow()
+        {
+            LogController($"(Not implemented) Refresh xterm window");
+        }
+
+        public void XTermResizeTextArea(int columns, int rows)
+        {
+            LogController($"(Not implemented) Resize text area to columns=${columns}, rows={rows}");
+        }
+
+        public void XTermResizeWindow(int width, int height)
+        {
+            LogController($"(Not implemented) Resize xterm window to h={height}, w={width}");
+        }
+
+        public void ReportRgbBackgroundColor()
+        {
+            LogController($"OSC Get RGB background color");
+
+            var report = "\u001b]11;" + CursorState.Attributes.BackgroundXParseColor + "\u0007";
+
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(report) });
+        }
+
+        public void ReportRgbForegroundColor()
+        {
+            LogController($"OSC Get RGB foreground color");
+
+            var report = "\u001b]10;" + CursorState.Attributes.XParseColor + "\u0007";
+
+            SendData?.Invoke(this, new SendDataEventArgs { Data = Encoding.UTF8.GetBytes(report) });
         }
     }
 }

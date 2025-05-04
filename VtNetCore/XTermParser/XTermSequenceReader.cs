@@ -16,6 +16,7 @@
             bool isQuery = false;
             bool isSend = false;
             bool isBang = false;
+            bool isEquals = false;
             char? modifier = null;
 
             int currentParameter = -1;
@@ -32,6 +33,8 @@
                     isSend = true;
                 else if (atStart && next == '!')
                     isBang = true;
+                else if (atStart && next == '=')
+                    isEquals = true;
                 else if (next == ';')
                 {
                     if (currentParameter == -1)
@@ -52,7 +55,7 @@
                     else
                         currentParameter = (currentParameter * 10) + Convert.ToInt32(next - '0');
                 }
-                else if (next == '$' || next == '"' || next == ' ' || next =='\'')
+                else if (next == '$' || next == '"' || next == ' ' || next == '\'')
                 {
                     if (modifier.HasValue)
                         throw new EscapeSequenceException("There appears to be two modifiers in a row", stream.Stacked);
@@ -94,6 +97,7 @@
                         IsQuery = isQuery,
                         IsSend = isSend,
                         IsBang = isBang,
+                        IsEquals = isEquals,
                         Command = (modifier.HasValue ? modifier.Value.ToString() : "") + next.ToString(),
                         ProcessFirst = ProcesFirst.Count > 0 ? ProcesFirst : null
                     };
@@ -131,10 +135,14 @@
 
                 var next = stream.Read();
 
-                if (readingCommand)
+                if (readingCommand || next == 0x07 || next == 0x9C) // BEL or ST
                 {
-                    if (next == 0x07 || next == 0x9C)        // BEL or ST
+                    if (next == 0x07 || next == 0x9C) // BEL or ST
                     {
+                        if (currentParameter!=-1)
+                        {
+                            Parameters.Add(currentParameter);
+                        }
                         var osc = new OscSequence
                         {
                             Parameters = Parameters,
@@ -170,6 +178,7 @@
 
                         Parameters.Add(currentParameter);
                         currentParameter = -1;
+                        readingCommand = true;
                     }
                     else if (char.IsDigit(next))
                     {
@@ -326,7 +335,7 @@
                     characterSet = ECharacterSet.C2;
                     break;
                 case 'A':
-                    characterSet = ECharacterSet.UK;
+                    characterSet = ECharacterSet.Latin1;
                     break;
                 case '4':
                     characterSet = ECharacterSet.Dutch;
@@ -349,6 +358,7 @@
                     break;
                 case 'E':
                 case '6':
+                case '`':
                     characterSet = ECharacterSet.NorwegianDanish;
                     break;
                 case 'Z':
@@ -362,7 +372,34 @@
                     characterSet = ECharacterSet.Swiss;
                     break;
 
+                case '>':
+                    characterSet = ECharacterSet.DecTechnical;
+                    break;
+
+                case '<':
+                    characterSet = ECharacterSet.DecSupplemental;
+                    break;
+
+                case '%':
+                    var num = stream.Read();
+                    switch (num)
+                    {
+                        case '5':
+                            characterSet = ECharacterSet.DecSupplementalGraphic;
+                            break;
+                        case '6':
+                            characterSet = ECharacterSet.Portuguese;
+                            break;
+                        default:
+                            characterSet = ECharacterSet.USASCII;
+                            break;
+                    }
+                    break;
+
                 default:
+                    characterSet = ECharacterSet.USASCII;
+                    break;
+
                 case 'B':
                     characterSet = ECharacterSet.USASCII;
                     break;

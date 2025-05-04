@@ -273,6 +273,20 @@
         }
 
         /// <summary>
+        /// Returns the foreground color as a XParseColor string
+        /// </summary>
+        public string XParseColor
+        {
+            get
+            {
+                if (ForegroundRgb != null)
+                    return ForegroundRgb.XParseColor;
+
+                return (new TerminalColor(ForegroundColor, Bright)).XParseColor;
+            }
+        }
+
+        /// <summary>
         /// Returns the background color as a web color
         /// </summary>
         public string BackgroundWebColor
@@ -287,6 +301,20 @@
         }
 
         /// <summary>
+        /// Returns the background color as a XParseColor string
+        /// </summary>
+        public string BackgroundXParseColor
+        {
+            get
+            {
+                if (BackgroundRgb != null)
+                    return BackgroundRgb.XParseColor;
+
+                return (new TerminalColor(BackgroundColor, false)).XParseColor;
+            }
+        }
+
+        /// <summary>
         /// Returns a verbose indented string for debugging
         /// </summary>
         /// <returns>a debugging string</returns>
@@ -294,9 +322,9 @@
         {
             return
                 "  ForegroundColor: " + ForegroundColor.ToString() + "\n" +
-                "  ForegroundRgb: " + ForegroundRgb == null ? "<null>" : ForegroundRgb.ToString() + "\n" + 
+                "  ForegroundRgb: " + (ForegroundRgb == null ? "<null>" : ForegroundRgb.ToString()) + "\n" + 
                 "  BackgroundColor: " + BackgroundColor.ToString() + "\n" +
-                "  BackgroundRgb: " + BackgroundRgb == null ? "<null>" : BackgroundRgb.ToString() + "\n" +
+                "  BackgroundRgb: " + (BackgroundRgb == null ? "<null>" : BackgroundRgb.ToString()) + "\n" +
                 "  Bright: " + Bright.ToString() + "\n" +
                 "  Standout: " + Standout.ToString() + "\n" +
                 "  Underscore: " + Underscore.ToString() + "\n" +
